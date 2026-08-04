@@ -525,5 +525,21 @@
   "heat_source.ac_min_outdoor": "Min. outdoor temp for AC heating",
   "heat_source.ac_min_outdoor_hint": "Disable AC heating entirely below this temperature to protect the heat pump hardware.",
   "heat_source.ac_min_outdoor_suffix": "°C",
-  "heat_source.summary_disabled": "Smart source selection is off"
+  "heat_source.summary_disabled": "Smart source selection is off",
+  "schedule.cheap_title": "Cheap electricity pre-conditioning",
+  "schedule.cheap_delta": "Pre-heat / pre-cool by",
+  "schedule.cheap_slots": "Apply during",
+  "schedule.cheap_slots_both": "Comfort and eco",
+  "schedule.cheap_slots_comfort": "Comfort only",
+  "schedule.cheap_slots_eco": "Eco only",
+  "schedule.cheap_hint": "When this boolean sensor is on, heating targets are raised and cooling targets are lowered by the configured amount.",
+  "schedule.cheap_summary": "Cheap electricity adjustment: ±{delta}° when sensor is on",
+  "schedule.expensive_title": "Expensive electricity setback",
+  "schedule.expensive_delta": "Set back by",
+  "schedule.expensive_hint": "When this boolean sensor is on, heating targets are lowered and cooling targets are raised by the configured amount to reduce demand.",
+  "schedule.expensive_summary": "Expensive electricity setback: ±{delta}° when sensor is on",
+  "schedule.price_slots": "Apply during",
+  "schedule.price_slots_both": "Comfort and eco",
+  "schedule.price_slots_comfort": "Comfort only",
+  "schedule.price_slots_eco": "Eco only"
 }

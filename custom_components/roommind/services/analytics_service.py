@@ -90,6 +90,8 @@ async def _compute_target_forecast(
     from ..utils.presence_utils import is_presence_away
     from ..utils.schedule_utils import (
         get_active_schedule_entity,
+        is_electricity_cheap,
+        is_electricity_expensive,
         read_schedule_blocks,
         resolve_targets_at_time,
     )
@@ -105,6 +107,12 @@ async def _compute_target_forecast(
     vacation_until = settings.get("vacation_until")
     vacation_temp = settings.get("vacation_temp")
     climate_mode = room.get("climate_mode", "auto")
+    electricity_cheap = is_electricity_cheap(hass, room)
+    electricity_cheap_delta = float(room.get("electricity_cheap_delta", 0.0) or 0.0)
+    electricity_cheap_slots = room.get("electricity_cheap_slots", "both")
+    electricity_expensive = is_electricity_expensive(hass, room)
+    electricity_expensive_delta = float(room.get("electricity_expensive_delta", 0.0) or 0.0)
+    electricity_expensive_slots = room.get("electricity_expensive_slots", "both")
 
     presence_away = not room.get("ignore_presence", False) and is_presence_away(hass, room, settings)
 
@@ -137,6 +145,12 @@ async def _compute_target_forecast(
             presence_away_action=settings.get("presence_away_action", "eco"),
             schedule_off_action=settings.get("schedule_off_action", "eco"),
             presence_clears_override=bool(settings.get("presence_clears_override", False)),
+            electricity_cheap=electricity_cheap,
+            electricity_cheap_delta=electricity_cheap_delta,
+            electricity_cheap_slots=electricity_cheap_slots,
+            electricity_expensive=electricity_expensive,
+            electricity_expensive_delta=electricity_expensive_delta,
+            electricity_expensive_slots=electricity_expensive_slots,
         )
         heat_target = targets.heat
         cool_target = targets.cool

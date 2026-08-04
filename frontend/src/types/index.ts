@@ -139,6 +139,12 @@ export interface RoomConfig {
   heat_source_outdoor_threshold?: number;
   heat_source_ac_min_outdoor?: number;
   climate_control_enabled?: boolean;
+  electricity_cheap_sensor?: string;
+  electricity_cheap_delta?: number;
+  electricity_cheap_slots?: "both" | "comfort" | "eco";
+  electricity_expensive_sensor?: string;
+  electricity_expensive_delta?: number;
+  electricity_expensive_slots?: "both" | "comfort" | "eco";
   live?: RoomLiveData;
 }
 

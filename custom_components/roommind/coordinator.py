@@ -76,7 +76,12 @@ from .utils.device_utils import (
     room_contributes_to_group,
 )
 from .utils.history_store import HistoryStore
-from .utils.schedule_utils import resolve_schedule_index
+from .utils.schedule_utils import (
+    _apply_electricity_price_adjustment,
+    is_electricity_cheap,
+    is_electricity_expensive,
+    resolve_schedule_index,
+)
 from .utils.sensor_utils import read_sensor_value
 from .utils.temp_utils import celsius_delta_to_ha, ha_temp_to_celsius, ha_temp_unit_str
 
@@ -1554,13 +1559,35 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                     )
                 )
 
+        electricity_cheap = is_electricity_cheap(self.hass, room)
+        electricity_cheap_delta = float(room.get("electricity_cheap_delta", 0.0) or 0.0)
+        electricity_cheap_slots = room.get("electricity_cheap_slots", "both")
+        electricity_expensive = is_electricity_expensive(self.hass, room)
+        electricity_expensive_delta = float(room.get("electricity_expensive_delta", 0.0) or 0.0)
+        electricity_expensive_slots = room.get("electricity_expensive_slots", "both")
+
+        def apply_price(targets: TargetTemps, slot: str) -> TargetTemps:
+            return _apply_electricity_price_adjustment(
+                targets,
+                slot,
+                electricity_cheap,
+                electricity_cheap_delta,
+                electricity_cheap_slots,
+                electricity_expensive,
+                electricity_expensive_delta,
+                electricity_expensive_slots,
+            )
+
         # 2.5 Presence-based eco or off (skip if room ignores presence)
         if not room.get("ignore_presence", False) and self._is_presence_away(room, settings):
             if settings.get("presence_away_action", "eco") == "off":
                 return TargetTemps(heat=None, cool=None)
-            return TargetTemps(
-                heat=room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT)),
-                cool=room.get("eco_cool", DEFAULT_ECO_COOL),
+            return apply_price(
+                TargetTemps(
+                    heat=room.get("eco_heat", room.get("eco_temp", DEFAULT_ECO_HEAT)),
+                    cool=room.get("eco_cool", DEFAULT_ECO_COOL),
+                ),
+                "eco",
             )
 
         # 3. Schedule / comfort / eco
@@ -1572,7 +1599,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         # schedule_entity_id is pre-resolved by the caller (_async_process_room) to avoid
         # a second resolve_schedule_index() call that could diverge if selector state changes.
         if not schedule_entity_id:
-            return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+            return apply_price(TargetTemps(heat=comfort_heat, cool=comfort_cool), "comfort")
 
         state = self.hass.states.get(schedule_entity_id)
         state_unavailable = state is None or state.state in ("unavailable", "unknown")
@@ -1583,11 +1610,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             # jumping to comfort_heat. Without cached blocks we have no signal,
             # so comfort_heat remains the last-resort fallback.
             if schedule_blocks is None:
-                return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+                return apply_price(TargetTemps(heat=comfort_heat, cool=comfort_cool), "comfort")
             if find_active_block(schedule_blocks, time.time()) is None:
                 if settings.get("schedule_off_action", "eco") == "off":
                     return TargetTemps(heat=None, cool=None)
-                return TargetTemps(heat=eco_heat, cool=eco_cool)
+                return apply_price(TargetTemps(heat=eco_heat, cool=eco_cool), "eco")
             # Block is active right now: fall through to block resolution below.
 
         if state_unavailable or state.state == SCHEDULE_STATE_ON:
@@ -1619,19 +1646,19 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                         c = ha_temp_to_celsius(self.hass, float(cool_temp))
                     except (ValueError, TypeError):
                         pass
-                return TargetTemps(heat=h, cool=c)
+                return apply_price(TargetTemps(heat=h, cool=c), "comfort")
             if block_temp is not None:
                 try:
                     t = ha_temp_to_celsius(self.hass, float(block_temp))
-                    return TargetTemps(heat=t, cool=t)  # single-point
+                    return apply_price(TargetTemps(heat=t, cool=t), "comfort")  # single-point
                 except (ValueError, TypeError):
                     pass
-            return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+            return apply_price(TargetTemps(heat=comfort_heat, cool=comfort_cool), "comfort")
 
         # Schedule is "off" -> eco or off
         if settings.get("schedule_off_action", "eco") == "off":
             return TargetTemps(heat=None, cool=None)
-        return TargetTemps(heat=eco_heat, cool=eco_cool)
+        return apply_price(TargetTemps(heat=eco_heat, cool=eco_cool), "eco")
 
     async def async_room_added(self, room: dict) -> None:
         """Create entity platform entities for a newly added/updated room and refresh data."""

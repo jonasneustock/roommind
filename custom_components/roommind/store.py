@@ -72,6 +72,12 @@ def _migrate_room(room: dict) -> dict:
     _migrate_override_fields(room)
     migrate_heat_pump_devices(room.get("devices", []))
     ensure_room_has_devices(room)
+    room.setdefault("electricity_cheap_sensor", "")
+    room.setdefault("electricity_cheap_delta", 0.0)
+    room.setdefault("electricity_cheap_slots", "both")
+    room.setdefault("electricity_expensive_sensor", "")
+    room.setdefault("electricity_expensive_delta", 0.0)
+    room.setdefault("electricity_expensive_slots", "both")
     return room
 
 
@@ -273,6 +279,12 @@ class RoomMindStore:
             ),
             "heat_source_ac_min_outdoor": config.get("heat_source_ac_min_outdoor", DEFAULT_HEAT_SOURCE_AC_MIN_OUTDOOR),
             "climate_control_enabled": config.get("climate_control_enabled", True),
+            "electricity_cheap_sensor": config.get("electricity_cheap_sensor", ""),
+            "electricity_cheap_delta": config.get("electricity_cheap_delta", 0.0),
+            "electricity_cheap_slots": config.get("electricity_cheap_slots", "both"),
+            "electricity_expensive_sensor": config.get("electricity_expensive_sensor", ""),
+            "electricity_expensive_delta": config.get("electricity_expensive_delta", 0.0),
+            "electricity_expensive_slots": config.get("electricity_expensive_slots", "both"),
         }
         # Directional device sync for new rooms (truthiness check, not just presence)
         if "devices" in config and config["devices"]:

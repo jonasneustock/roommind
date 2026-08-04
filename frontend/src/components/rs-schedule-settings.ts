@@ -34,6 +34,12 @@ export class RsScheduleSettings extends RsScheduleBase {
   @property({ type: Number }) public comfortCool = 24.0;
   @property({ type: Number }) public ecoHeat = 17.0;
   @property({ type: Number }) public ecoCool = 27.0;
+  @property({ type: String }) public electricityCheapSensor = "";
+  @property({ type: Number }) public electricityCheapDelta = 0.0;
+  @property({ type: String }) public electricityCheapSlots: "both" | "comfort" | "eco" = "both";
+  @property({ type: String }) public electricityExpensiveSensor = "";
+  @property({ type: Number }) public electricityExpensiveDelta = 0.0;
+  @property({ type: String }) public electricityExpensiveSlots: "both" | "comfort" | "eco" = "both";
   @property({ type: String }) public climateMode: ClimateMode = "auto";
 
   static styles = [
@@ -233,6 +239,7 @@ export class RsScheduleSettings extends RsScheduleBase {
         (value) => this._onSelectorEntityChange(value),
       )}
       ${this._renderTemperatureInputs(l)}
+      ${this.editing ? this._renderElectricityPriceInputs(l) : this._renderElectricityPriceSummary(l)}
     `;
   }
 
@@ -370,6 +377,91 @@ export class RsScheduleSettings extends RsScheduleBase {
 
   // ─── Selector value text ───────────────────────────────────────
 
+
+  private _renderElectricityPriceSummary(l: string) {
+    const cheap = this.electricityCheapSensor && this.electricityCheapDelta > 0;
+    const expensive = this.electricityExpensiveSensor && this.electricityExpensiveDelta > 0;
+    if (!cheap && !expensive) return nothing;
+    return html`<div class="fallback-hint">
+      ${cheap ? localize("schedule.cheap_summary", l, { delta: this.electricityCheapDelta }) : ""}
+      ${cheap && expensive ? " · " : ""}
+      ${expensive ? localize("schedule.expensive_summary", l, { delta: this.electricityExpensiveDelta }) : ""}
+    </div>`;
+  }
+
+  private _renderElectricityPriceInputs(l: string) {
+    return html`
+      ${this._renderPriceInputGroup(
+        l,
+        "schedule.cheap_title",
+        "schedule.cheap_delta",
+        "schedule.cheap_hint",
+        this.electricityCheapSensor,
+        this.electricityCheapDelta,
+        this.electricityCheapSlots,
+        "electricity_cheap",
+      )}
+      ${this._renderPriceInputGroup(
+        l,
+        "schedule.expensive_title",
+        "schedule.expensive_delta",
+        "schedule.expensive_hint",
+        this.electricityExpensiveSensor,
+        this.electricityExpensiveDelta,
+        this.electricityExpensiveSlots,
+        "electricity_expensive",
+      )}
+    `;
+  }
+
+  private _renderPriceInputGroup(
+    l: string,
+    titleKey: Parameters<typeof localize>[0],
+    deltaKey: Parameters<typeof localize>[0],
+    hintKey: Parameters<typeof localize>[0],
+    sensor: string,
+    delta: number,
+    slots: "both" | "comfort" | "eco",
+    keyPrefix: "electricity_cheap" | "electricity_expensive",
+  ) {
+    return html`
+      <div class="selector-section">
+        <label class="form-label">${localize(titleKey, l)}</label>
+        <ha-entity-picker
+          .hass=${this.hass}
+          .value=${sensor}
+          .includeDomains=${["input_boolean", "binary_sensor"]}
+          allow-custom-entity
+          @value-changed=${(e: CustomEvent) => this._emitPrice(`${keyPrefix}_sensor`, e.detail?.value ?? "")}
+        ></ha-entity-picker>
+        <div class="temp-inputs" style="margin-top:8px">
+          <ha-textfield
+            type="number"
+            label=${localize(deltaKey, l)}
+            suffix=${tempUnit(this.hass)}
+            step=${tempStep(this.hass)}
+            min="0"
+            max="5"
+            .value=${String(toDisplay(delta, this.hass))}
+            @change=${(e: Event) => this._onPriceDeltaChange(e, `${keyPrefix}_delta`)}
+          ></ha-textfield>
+          <ha-select
+            label=${localize("schedule.price_slots", l)}
+            .value=${slots}
+            @selected=${(e: CustomEvent) =>
+              this._emitPrice(`${keyPrefix}_slots`, (e.target as HTMLElement & { value: string }).value)}
+            @closed=${(e: Event) => e.stopPropagation()}
+          >
+            <ha-list-item value="both">${localize("schedule.price_slots_both", l)}</ha-list-item>
+            <ha-list-item value="comfort">${localize("schedule.price_slots_comfort", l)}</ha-list-item>
+            <ha-list-item value="eco">${localize("schedule.price_slots_eco", l)}</ha-list-item>
+          </ha-select>
+        </div>
+        <div class="section-hint" style="margin-top:4px">${localize(hintKey, l)}</div>
+      </div>
+    `;
+  }
+
   private _getSelectorValueText(l: string): string {
     const selectorState = this.hass?.states?.[this.scheduleSelectorEntity];
     if (!selectorState) return "";
@@ -468,6 +560,15 @@ export class RsScheduleSettings extends RsScheduleBase {
   }
 
   // ─── Temperature change handlers ──────────────────────────────
+
+  private _emitPrice(key: string, value: unknown) {
+    this.dispatchEvent(new CustomEvent("electricity-cheap-changed", { detail: { key, value }, bubbles: true, composed: true }));
+  }
+
+  private _onPriceDeltaChange(e: Event, key: string) {
+    const target = e.target as HTMLElement & { value: string };
+    this._emitPrice(key, toCelsius(parseFloat(target.value) || 0, this.hass));
+  }
 
   private _onComfortHeatChange(e: Event) {
     const target = e.target as HTMLElement & { value: string };

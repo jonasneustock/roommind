@@ -89,6 +89,12 @@ export class RsRoomDetail extends LitElement {
   @state() private _heatSourcePrimaryDelta = 1.5;
   @state() private _heatSourceOutdoorThreshold = 5.0;
   @state() private _heatSourceAcMinOutdoor = -15.0;
+  @state() private _electricityCheapSensor = "";
+  @state() private _electricityCheapDelta = 0.0;
+  @state() private _electricityCheapSlots: "both" | "comfort" | "eco" = "both";
+  @state() private _electricityExpensiveSensor = "";
+  @state() private _electricityExpensiveDelta = 0.0;
+  @state() private _electricityExpensiveSlots: "both" | "comfort" | "eco" = "both";
   @state() private _optimisticCoverResume = false;
 
   private _prevAreaId: string | null = null;
@@ -292,6 +298,12 @@ export class RsRoomDetail extends LitElement {
       this._heatSourcePrimaryDelta = this.config.heat_source_primary_delta ?? 1.5;
       this._heatSourceOutdoorThreshold = this.config.heat_source_outdoor_threshold ?? 5.0;
       this._heatSourceAcMinOutdoor = this.config.heat_source_ac_min_outdoor ?? -15.0;
+      this._electricityCheapSensor = this.config.electricity_cheap_sensor ?? "";
+      this._electricityCheapDelta = this.config.electricity_cheap_delta ?? 0.0;
+      this._electricityCheapSlots = this.config.electricity_cheap_slots ?? "both";
+      this._electricityExpensiveSensor = this.config.electricity_expensive_sensor ?? "";
+      this._electricityExpensiveDelta = this.config.electricity_expensive_delta ?? 0.0;
+      this._electricityExpensiveSlots = this.config.electricity_expensive_slots ?? "both";
     } else {
       this._devices = [];
       this._selectedTempSensor = "";
@@ -332,6 +344,12 @@ export class RsRoomDetail extends LitElement {
       this._heatSourcePrimaryDelta = 1.5;
       this._heatSourceOutdoorThreshold = 5.0;
       this._heatSourceAcMinOutdoor = -15.0;
+      this._electricityCheapSensor = "";
+      this._electricityCheapDelta = 0.0;
+      this._electricityCheapSlots = "both";
+      this._electricityExpensiveSensor = "";
+      this._electricityExpensiveDelta = 0.0;
+      this._electricityExpensiveSlots = "both";
     }
     this._dirty = false;
 
@@ -438,6 +456,15 @@ export class RsRoomDetail extends LitElement {
                     .ecoHeat=${this._ecoHeat}
                     .ecoCool=${this._ecoCool}
                     .climateMode=${this._climateMode}
+                    .electricityCheapSensor=${this._electricityCheapSensor}
+                    .electricityCheapDelta=${this._electricityCheapDelta}
+                    .electricityCheapSlots=${this._electricityCheapSlots}
+            .electricityExpensiveSensor=${this._electricityExpensiveSensor}
+            .electricityExpensiveDelta=${this._electricityExpensiveDelta}
+            .electricityExpensiveSlots=${this._electricityExpensiveSlots}
+                    .electricityExpensiveSensor=${this._electricityExpensiveSensor}
+                    .electricityExpensiveDelta=${this._electricityExpensiveDelta}
+                    .electricityExpensiveSlots=${this._electricityExpensiveSlots}
                     .editing=${false}
                     @schedules-changed=${this._onSchedulesChanged}
                     @schedule-selector-changed=${this._onScheduleSelectorChanged}
@@ -445,6 +472,7 @@ export class RsRoomDetail extends LitElement {
                     @comfort-cool-changed=${this._onComfortCoolChanged}
                     @eco-heat-changed=${this._onEcoHeatChanged}
                     @eco-cool-changed=${this._onEcoCoolChanged}
+                    @electricity-cheap-changed=${this._onElectricityCheapChanged}
                   ></rs-schedule-settings>
                   ${this.config
                     ? html`
@@ -680,6 +708,9 @@ export class RsRoomDetail extends LitElement {
             .ecoHeat=${this._ecoHeat}
             .ecoCool=${this._ecoCool}
             .climateMode=${this._climateMode}
+            .electricityCheapSensor=${this._electricityCheapSensor}
+            .electricityCheapDelta=${this._electricityCheapDelta}
+            .electricityCheapSlots=${this._electricityCheapSlots}
             .editing=${true}
             @schedules-changed=${this._onSchedulesChanged}
             @schedule-selector-changed=${this._onScheduleSelectorChanged}
@@ -687,6 +718,7 @@ export class RsRoomDetail extends LitElement {
             @comfort-cool-changed=${this._onComfortCoolChanged}
             @eco-heat-changed=${this._onEcoHeatChanged}
             @eco-cool-changed=${this._onEcoCoolChanged}
+            @electricity-cheap-changed=${this._onElectricityCheapChanged}
           ></rs-schedule-settings>
         </rs-edit-dialog>`;
       case "devices":
@@ -1061,6 +1093,17 @@ export class RsRoomDetail extends LitElement {
 
   // ---- Auto-save ----
 
+  private _onElectricityCheapChanged(e: CustomEvent<{ key: string; value: unknown }>) {
+    const { key, value } = e.detail;
+    if (key === "electricity_cheap_sensor") this._electricityCheapSensor = value as string;
+    else if (key === "electricity_cheap_delta") this._electricityCheapDelta = value as number;
+    else if (key === "electricity_cheap_slots") this._electricityCheapSlots = value as "both" | "comfort" | "eco";
+    else if (key === "electricity_expensive_sensor") this._electricityExpensiveSensor = value as string;
+    else if (key === "electricity_expensive_delta") this._electricityExpensiveDelta = value as number;
+    else if (key === "electricity_expensive_slots") this._electricityExpensiveSlots = value as "both" | "comfort" | "eco";
+    this._autoSave();
+  }
+
   private _onDisplayNameChanged(e: CustomEvent<{ value: string }>) {
     this._displayName = e.detail.value;
     this._autoSave();
@@ -1119,6 +1162,12 @@ export class RsRoomDetail extends LitElement {
         heat_source_primary_delta: this._heatSourcePrimaryDelta,
         heat_source_outdoor_threshold: this._heatSourceOutdoorThreshold,
         heat_source_ac_min_outdoor: this._heatSourceAcMinOutdoor,
+        electricity_cheap_sensor: this._electricityCheapSensor,
+        electricity_cheap_delta: this._electricityCheapDelta,
+        electricity_cheap_slots: this._electricityCheapSlots,
+        electricity_expensive_sensor: this._electricityExpensiveSensor,
+        electricity_expensive_delta: this._electricityExpensiveDelta,
+        electricity_expensive_slots: this._electricityExpensiveSlots,
       });
 
       this._dirty = false;

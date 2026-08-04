@@ -104,6 +104,12 @@ _ROOM_SAVE_FIELDS = (
     "heat_source_ac_min_outdoor",
     "valve_protection_exclude",
     "climate_control_enabled",
+    "electricity_cheap_sensor",
+    "electricity_cheap_delta",
+    "electricity_cheap_slots",
+    "electricity_expensive_sensor",
+    "electricity_expensive_delta",
+    "electricity_expensive_slots",
 )
 
 _SETTINGS_SAVE_FIELDS = (
@@ -366,6 +372,12 @@ async def websocket_list_rooms(
         vol.Optional("heat_source_outdoor_threshold"): vol.All(vol.Coerce(float), vol.Range(min=-20, max=25)),
         vol.Optional("heat_source_ac_min_outdoor"): vol.All(vol.Coerce(float), vol.Range(min=-30, max=5)),
         vol.Optional("climate_control_enabled"): bool,
+        vol.Optional("electricity_cheap_sensor"): str,
+        vol.Optional("electricity_cheap_delta"): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
+        vol.Optional("electricity_cheap_slots"): vol.In(["both", "comfort", "eco"]),
+        vol.Optional("electricity_expensive_sensor"): str,
+        vol.Optional("electricity_expensive_delta"): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
+        vol.Optional("electricity_expensive_slots"): vol.In(["both", "comfort", "eco"]),
     }
 )
 @websocket_api.async_response

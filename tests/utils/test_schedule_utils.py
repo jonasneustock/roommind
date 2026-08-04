@@ -1500,3 +1500,128 @@ class TestTimezoneAwareBlockResolution:
                 eco_cool=29.0,
             )
         assert result == TargetTemps(heat=24.0, cool=26.0)  # comfort
+
+
+class TestCheapElectricityTargets:
+    """Tests for cheap electricity target adjustments."""
+
+    def test_adjusts_comfort_heat_and_cool_when_enabled(self):
+        """Cheap electricity pre-heats and pre-cools comfort targets."""
+        from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
+
+        result = resolve_targets_at_time(
+            ts=time.time(),
+            schedule_blocks=None,
+            override_until=None,
+            override_heat=None,
+            override_cool=None,
+            vacation_until=None,
+            vacation_temp=None,
+            comfort_heat=21.0,
+            comfort_cool=24.0,
+            eco_heat=17.0,
+            eco_cool=27.0,
+            electricity_cheap=True,
+            electricity_cheap_delta=1.5,
+            electricity_cheap_slots="comfort",
+        )
+
+        assert result == TargetTemps(heat=22.5, cool=22.5)
+
+    def test_adjusts_eco_only_when_selected(self):
+        """Eco-only cheap electricity adjustments skip comfort slots."""
+        from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
+
+        now = datetime(2026, 1, 5, 12, 0, tzinfo=UTC).timestamp()
+        blocks = {"monday": []}
+
+        result = resolve_targets_at_time(
+            ts=now,
+            schedule_blocks=blocks,
+            override_until=None,
+            override_heat=None,
+            override_cool=None,
+            vacation_until=None,
+            vacation_temp=None,
+            comfort_heat=21.0,
+            comfort_cool=24.0,
+            eco_heat=17.0,
+            eco_cool=27.0,
+            electricity_cheap=True,
+            electricity_cheap_delta=2.0,
+            electricity_cheap_slots="eco",
+        )
+
+        assert result == TargetTemps(heat=19.0, cool=25.0)
+
+    def test_no_adjustment_when_sensor_not_cheap(self):
+        """Targets stay unchanged when cheap electricity is inactive."""
+        from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
+
+        result = resolve_targets_at_time(
+            ts=time.time(),
+            schedule_blocks=None,
+            override_until=None,
+            override_heat=None,
+            override_cool=None,
+            vacation_until=None,
+            vacation_temp=None,
+            comfort_heat=21.0,
+            comfort_cool=24.0,
+            eco_heat=17.0,
+            eco_cool=27.0,
+            electricity_cheap=False,
+            electricity_cheap_delta=2.0,
+            electricity_cheap_slots="both",
+        )
+
+        assert result == TargetTemps(heat=21.0, cool=24.0)
+
+    def test_expensive_energy_adjusts_targets_to_reduce_demand(self):
+        """Expensive energy lowers heat targets and raises cool targets."""
+        from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
+
+        result = resolve_targets_at_time(
+            ts=time.time(),
+            schedule_blocks=None,
+            override_until=None,
+            override_heat=None,
+            override_cool=None,
+            vacation_until=None,
+            vacation_temp=None,
+            comfort_heat=21.0,
+            comfort_cool=24.0,
+            eco_heat=17.0,
+            eco_cool=27.0,
+            electricity_expensive=True,
+            electricity_expensive_delta=2.0,
+            electricity_expensive_slots="comfort",
+        )
+
+        assert result == TargetTemps(heat=19.0, cool=26.0)
+
+    def test_expensive_energy_takes_precedence_over_cheap_energy(self):
+        """Expensive setback wins when both price sensors are active."""
+        from custom_components.roommind.utils.schedule_utils import resolve_targets_at_time
+
+        result = resolve_targets_at_time(
+            ts=time.time(),
+            schedule_blocks=None,
+            override_until=None,
+            override_heat=None,
+            override_cool=None,
+            vacation_until=None,
+            vacation_temp=None,
+            comfort_heat=21.0,
+            comfort_cool=24.0,
+            eco_heat=17.0,
+            eco_cool=27.0,
+            electricity_cheap=True,
+            electricity_cheap_delta=1.0,
+            electricity_cheap_slots="both",
+            electricity_expensive=True,
+            electricity_expensive_delta=2.0,
+            electricity_expensive_slots="both",
+        )
+
+        assert result == TargetTemps(heat=19.0, cool=26.0)

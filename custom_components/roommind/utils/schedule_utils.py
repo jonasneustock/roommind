@@ -91,6 +91,61 @@ def resolve_target_at_time(
     return eco_temp
 
 
+def _is_boolean_sensor_on(hass: HomeAssistant, entity_id: str | None) -> bool:
+    """Return whether a boolean-like entity is on/true."""
+    if not entity_id:
+        return False
+    state = hass.states.get(entity_id)
+    return state is not None and str(state.state).lower() in ("on", "true", "1", "yes")
+
+
+def _constrain_heat_cool_band(heat: float | None, cool: float | None) -> TargetTemps:
+    """Keep heat/cool targets from crossing after price adjustments."""
+    if heat is not None and cool is not None and heat > cool:
+        midpoint = round((heat + cool) / 2, 1)
+        heat = midpoint
+        cool = midpoint
+    return TargetTemps(heat=heat, cool=cool)
+
+
+def _apply_electricity_price_adjustment(
+    targets: TargetTemps,
+    slot: str,
+    electricity_cheap: bool,
+    electricity_cheap_delta: float,
+    electricity_cheap_slots: str,
+    electricity_expensive: bool = False,
+    electricity_expensive_delta: float = 0.0,
+    electricity_expensive_slots: str = "both",
+) -> TargetTemps:
+    """Adjust targets for cheap/expensive electricity in the active slot.
+
+    Expensive energy takes precedence when both sensors are active: heating
+    targets are lowered and cooling targets are raised to reduce demand.
+    Cheap energy does the inverse to pre-condition the room.
+    """
+    if electricity_expensive and electricity_expensive_delta > 0 and electricity_expensive_slots in ("both", slot):
+        heat = None if targets.heat is None else round(float(targets.heat) - electricity_expensive_delta, 1)
+        cool = None if targets.cool is None else round(float(targets.cool) + electricity_expensive_delta, 1)
+        return _constrain_heat_cool_band(heat, cool)
+
+    if not electricity_cheap or electricity_cheap_delta <= 0 or electricity_cheap_slots not in ("both", slot):
+        return targets
+    heat = None if targets.heat is None else round(float(targets.heat) + electricity_cheap_delta, 1)
+    cool = None if targets.cool is None else round(float(targets.cool) - electricity_cheap_delta, 1)
+    return _constrain_heat_cool_band(heat, cool)
+
+
+def is_electricity_cheap(hass: HomeAssistant, room: dict) -> bool:
+    """Return whether the room's cheap-electricity boolean sensor is on."""
+    return _is_boolean_sensor_on(hass, room.get("electricity_cheap_sensor"))
+
+
+def is_electricity_expensive(hass: HomeAssistant, room: dict) -> bool:
+    """Return whether the room's expensive-electricity boolean sensor is on."""
+    return _is_boolean_sensor_on(hass, room.get("electricity_expensive_sensor"))
+
+
 def resolve_targets_at_time(
     ts: float,
     schedule_blocks: dict | None,
@@ -108,6 +163,12 @@ def resolve_targets_at_time(
     presence_away_action: str = "eco",
     schedule_off_action: str = "eco",
     presence_clears_override: bool = False,
+    electricity_cheap: bool = False,
+    electricity_cheap_delta: float = 0.0,
+    electricity_cheap_slots: str = "both",
+    electricity_expensive: bool = False,
+    electricity_expensive_delta: float = 0.0,
+    electricity_expensive_slots: str = "both",
 ) -> TargetTemps:
     """Resolve dual heat/cool target temps at a specific timestamp.
 
@@ -125,10 +186,28 @@ def resolve_targets_at_time(
     if presence_away:
         if presence_away_action == "off":
             return TargetTemps(heat=None, cool=None)
-        return TargetTemps(heat=eco_heat, cool=eco_cool)
+        return _apply_electricity_price_adjustment(
+            TargetTemps(heat=eco_heat, cool=eco_cool),
+            "eco",
+            electricity_cheap,
+            electricity_cheap_delta,
+            electricity_cheap_slots,
+            electricity_expensive,
+            electricity_expensive_delta,
+            electricity_expensive_slots,
+        )
     # 3. Schedule blocks
     if schedule_blocks is None:
-        return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+        return _apply_electricity_price_adjustment(
+            TargetTemps(heat=comfort_heat, cool=comfort_cool),
+            "comfort",
+            electricity_cheap,
+            electricity_cheap_delta,
+            electricity_cheap_slots,
+            electricity_expensive,
+            electricity_expensive_delta,
+            electricity_expensive_slots,
+        )
     data = find_active_block(schedule_blocks, ts)
     if data is not None:
         heat_temp_raw = data.get("heat_temperature")
@@ -148,20 +227,56 @@ def resolve_targets_at_time(
                     c = block_temp_converter(val) if block_temp_converter else val
                 except (ValueError, TypeError):
                     pass
-            return TargetTemps(heat=h, cool=c)
+            return _apply_electricity_price_adjustment(
+                TargetTemps(heat=h, cool=c),
+                "comfort",
+                electricity_cheap,
+                electricity_cheap_delta,
+                electricity_cheap_slots,
+                electricity_expensive,
+                electricity_expensive_delta,
+                electricity_expensive_slots,
+            )
         block_temp = data.get("temperature")
         if block_temp is not None:
             try:
                 val = float(block_temp)
                 t = block_temp_converter(val) if block_temp_converter else val
-                return TargetTemps(heat=t, cool=t)
+                return _apply_electricity_price_adjustment(
+                    TargetTemps(heat=t, cool=t),
+                    "comfort",
+                    electricity_cheap,
+                    electricity_cheap_delta,
+                    electricity_cheap_slots,
+                    electricity_expensive,
+                    electricity_expensive_delta,
+                    electricity_expensive_slots,
+                )
             except (ValueError, TypeError):
                 pass
-        return TargetTemps(heat=comfort_heat, cool=comfort_cool)
+        return _apply_electricity_price_adjustment(
+            TargetTemps(heat=comfort_heat, cool=comfort_cool),
+            "comfort",
+            electricity_cheap,
+            electricity_cheap_delta,
+            electricity_cheap_slots,
+            electricity_expensive,
+            electricity_expensive_delta,
+            electricity_expensive_slots,
+        )
     # Not in any block → eco or off
     if schedule_off_action == "off":
         return TargetTemps(heat=None, cool=None)
-    return TargetTemps(heat=eco_heat, cool=eco_cool)
+    return _apply_electricity_price_adjustment(
+        TargetTemps(heat=eco_heat, cool=eco_cool),
+        "eco",
+        electricity_cheap,
+        electricity_cheap_delta,
+        electricity_cheap_slots,
+        electricity_expensive,
+        electricity_expensive_delta,
+        electricity_expensive_slots,
+    )
 
 
 def resolve_schedule_index(
@@ -299,6 +414,12 @@ def make_target_resolver(
     presence_away_action = settings.get("presence_away_action", "eco")
     schedule_off_action = settings.get("schedule_off_action", "eco")
     presence_clears_override = bool(settings.get("presence_clears_override", False))
+    electricity_cheap = bool(hass is not None and is_electricity_cheap(hass, room))
+    electricity_cheap_delta = float(room.get("electricity_cheap_delta", 0.0) or 0.0)
+    electricity_cheap_slots = room.get("electricity_cheap_slots", "both")
+    electricity_expensive = bool(hass is not None and is_electricity_expensive(hass, room))
+    electricity_expensive_delta = float(room.get("electricity_expensive_delta", 0.0) or 0.0)
+    electricity_expensive_slots = room.get("electricity_expensive_slots", "both")
 
     converter: Callable[[float], float] | None = None
     if hass is not None:
@@ -325,6 +446,12 @@ def make_target_resolver(
             presence_away_action=presence_away_action,
             schedule_off_action=schedule_off_action,
             presence_clears_override=presence_clears_override,
+            electricity_cheap=electricity_cheap,
+            electricity_cheap_delta=electricity_cheap_delta,
+            electricity_cheap_slots=electricity_cheap_slots,
+            electricity_expensive=electricity_expensive,
+            electricity_expensive_delta=electricity_expensive_delta,
+            electricity_expensive_slots=electricity_expensive_slots,
         )
         if targets.heat is None and targets.cool is None:
             return targets
