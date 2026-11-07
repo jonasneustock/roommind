@@ -11,6 +11,7 @@ import "./analytics/rs-analytics-summary";
 import "./analytics/rs-analytics-chart";
 import "./analytics/rs-analytics-rhythm";
 import "./analytics/rs-analytics-model";
+import "./analytics/rs-analytics-weather-weeks";
 
 @customElement("rs-analytics")
 export class RsAnalytics extends LitElement {
@@ -91,6 +92,7 @@ export class RsAnalytics extends LitElement {
         @room-selected=${this._onRoomSelected}
         @range-changed=${this._onRangeChanged}
       ></rs-analytics-toolbar>
+      ${Object.keys(this.rooms).length ? html`<rs-analytics-weather-weeks .hass=${this.hass} @range-changed=${this._onRangeChanged}></rs-analytics-weather-weeks>` : nothing}
       ${
         this._selectedRoom
           ? this._loading && !this._data

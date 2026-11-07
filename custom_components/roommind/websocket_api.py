@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CLIMATE_MODES,
@@ -33,6 +34,7 @@ from .services.analytics_service import (
     _safe_float,  # noqa: F401 - re-exported for tests
     build_analytics_data,
 )
+from .services.weather_week_match import read_weather_week_match
 from .utils.area_utils import REST_SWITCHED_OFF, rooms_with_area, rooms_without_area
 from .utils.device_utils import (
     COIL_DRY_INHERIT,
@@ -955,6 +957,26 @@ async def websocket_get_analytics(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command({vol.Required("type"): "roommind/analytics/weather_match"})
+@websocket_api.async_response
+async def websocket_weather_week_match(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Find a weather-matched historical week for the household."""
+    coordinator = _get_coordinator(hass)
+    store = hass.data[DOMAIN]["store"]
+    area_ids = tuple(rooms_with_area(hass, store.get_rooms()))
+    result = await hass.async_add_executor_job(
+        read_weather_week_match,
+        coordinator.history_store if coordinator else None,
+        area_ids,
+        dt_util.now(),
+    )
+    connection.send_result(msg["id"], result)
+
+
 # ---------------------------------------------------------------------------
 # Reset thermal model (per room)
 # ---------------------------------------------------------------------------
@@ -1126,6 +1148,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_get_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
     websocket_api.async_register_command(hass, websocket_get_analytics)
+    websocket_api.async_register_command(hass, websocket_weather_week_match)
     websocket_api.async_register_command(hass, websocket_thermal_reset)
     websocket_api.async_register_command(hass, websocket_thermal_reset_all)
     websocket_api.async_register_command(hass, websocket_boost_learning)

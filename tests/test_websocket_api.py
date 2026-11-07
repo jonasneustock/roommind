@@ -24,6 +24,7 @@ from custom_components.roommind.websocket_api import (
     websocket_save_settings,
     websocket_thermal_reset,
     websocket_thermal_reset_all,
+    websocket_weather_week_match,
 )
 
 # The HA @async_response decorator wraps async handlers into synchronous
@@ -1909,14 +1910,29 @@ async def test_analytics_model_has_occupancy_sensors_false(ws_hass, store, conne
 
 
 def test_register_websocket_commands(hass):
-    """async_register_websocket_commands registers all 13 commands."""
+    """async_register_websocket_commands includes weather week matching."""
     from unittest.mock import patch
 
     from custom_components.roommind.websocket_api import async_register_websocket_commands
 
     with patch("custom_components.roommind.websocket_api.websocket_api.async_register_command") as mock_reg:
         async_register_websocket_commands(hass)
-        assert mock_reg.call_count == 13
+        mock_reg.assert_any_call(hass, websocket_weather_week_match)
+        assert mock_reg.call_count == 14
+
+
+@pytest.mark.asyncio
+async def test_weather_week_match_without_history(ws_hass, connection):
+    """Weather matching returns a structured missing-data result before history is available."""
+    await websocket_weather_week_match.__wrapped__(
+        ws_hass, connection, {"id": 1, "type": "roommind/analytics/weather_match"}
+    )
+
+    request_id, result = connection.send_result.call_args.args
+    assert request_id == 1
+    assert result["status"] == "insufficient_current"
+    assert result["comparison"] is None
+    assert result["outdoor_profile"] == []
 
 
 # ---------------------------------------------------------------------------

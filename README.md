@@ -104,6 +104,7 @@ Select a room and time range (24h / 7d / 30d / 90d / custom) to view temperature
 
 - **This period**: time on target (within 0.5° of the wanted band, open windows left out), too cold/too warm shares, mean deviation, heating and cooling hours with the number of runs, and window-open hours.
 - **Daily rhythm**: an overview of at least 14 days by hour, with the selected range marked. It stays on the latest days, grows with a longer range (up to 31 days) and moves back for an older one. One view shows when the room heats or cools and when windows were open, the other when it missed its target. Hover or tap an hour for its figures, tap a day to show it in the chart above.
+- **Weather-matched weeks**: automatically compare this week with the earlier week whose outdoor temperatures were closest at the same local weekdays and hours. The overlay shows both profiles, their date ranges, and the average absolute hourly difference. Open either period to see its room analytics. The comparison needs at least six completed hours and paired measurements for at least 80% of the elapsed hours. It uses RoomMind’s existing outdoor temperature history.
 - **Heat loss** in the model card: how many degrees per hour the room loses without heating at 10° difference to outside, for comparing rooms or a renovation before and after. Degrees per hour, not watts, because RoomMind does not know the size of the room.
 
 Humidity needs a humidity sensor on the room. Humidity and time on target start with the first readings after the update, older history has neither.
