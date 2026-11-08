@@ -12,6 +12,7 @@ from custom_components.roommind.const import DOMAIN
 from custom_components.roommind.websocket_api import (
     _csv_to_points,
     _safe_float,
+    websocket_comfort_ranking,
     websocket_covers_clear_override,
     websocket_delete_room,
     websocket_get_analytics,
@@ -1903,20 +1904,36 @@ async def test_analytics_model_has_occupancy_sensors_false(ws_hass, store, conne
     assert "Q_occupancy" in result["model"]["model"]
 
 
+@pytest.mark.asyncio
+async def test_comfort_ranking_rejects_invalid_range(ws_hass, connection):
+    await websocket_comfort_ranking.__wrapped__(
+        ws_hass, connection, {"id": 1, "start_ts": 100.0, "end_ts": float("nan")}
+    )
+    connection.send_error.assert_called_once_with(1, "invalid_range", "Choose a valid range up to 90 days")
+
+
+@pytest.mark.asyncio
+async def test_comfort_ranking_no_history(ws_hass, connection):
+    ws_hass.config.time_zone = "UTC"
+    ws_hass.async_add_executor_job = AsyncMock(side_effect=lambda target, *args: target(*args))
+    await websocket_comfort_ranking.__wrapped__(ws_hass, connection, {"id": 1, "start_ts": 100.0, "end_ts": 200.0})
+    connection.send_result.assert_called_once_with(1, {"start_ts": 100.0, "end_ts": 200.0, "rooms": []})
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
 
 def test_register_websocket_commands(hass):
-    """async_register_websocket_commands registers all 13 commands."""
+    """async_register_websocket_commands registers all 14 commands."""
     from unittest.mock import patch
 
     from custom_components.roommind.websocket_api import async_register_websocket_commands
 
     with patch("custom_components.roommind.websocket_api.websocket_api.async_register_command") as mock_reg:
         async_register_websocket_commands(hass)
-        assert mock_reg.call_count == 13
+        assert mock_reg.call_count == 14
 
 
 # ---------------------------------------------------------------------------

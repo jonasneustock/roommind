@@ -40,6 +40,7 @@ NORMAL_ROOM_KEYS = {
     "heat_target",
     "cool_target",
     "schedule_temp_warnings",
+    "schedule_comfort",
     "mode",
     "commanded_mode",
     "heating_power",
@@ -153,6 +154,7 @@ class TestProcessRoomSnapshot:
         assert result["area_id"] == "living_room_abc12345"
         assert result["current_temp"] == 18.0
         assert result["target_temp"] == pytest.approx(21.0)
+        assert result["schedule_comfort"] == -1
         assert result["heat_target"] == pytest.approx(21.0)
         assert result["mode"] == "heating"
         assert result["heating_power"] > 0
@@ -299,6 +301,7 @@ class TestProcessRoomSnapshot:
         result = await coordinator._async_process_room(room, settings, [])
 
         assert result["window_open"] is True
+        assert result["schedule_comfort"] is None
         assert result["mode"] == "idle"
         assert result["heating_power"] == 0
 

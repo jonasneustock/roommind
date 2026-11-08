@@ -84,6 +84,7 @@ from .managers.residual_heat_tracker import AcReboundTracker, ResidualHeatTracke
 from .managers.valve_manager import ValveManager
 from .managers.weather_manager import WeatherManager
 from .managers.window_manager import WindowManager
+from .services.schedule_comfort import classify_schedule_comfort
 from .utils.area_utils import REST_SWITCHED_OFF, rooms_with_area
 from .utils.device_utils import (
     build_rooms_devices_map,
@@ -398,6 +399,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                 current_temp = rs.get("current_temp")
                 mode = rs.get("mode", MODE_IDLE)
                 target_temp = rs.get("target_temp")
+                schedule_comfort = rs.get("schedule_comfort")
                 # Use the prediction made *last* write cycle for the
                 # current timestamp — this compares "what the model
                 # predicted would happen" vs "what actually happened".
@@ -422,6 +424,9 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                             "humidity": rs.get("current_humidity"),
                             "heat_target": rs.get("heat_target"),
                             "cool_target": rs.get("cool_target"),
+                            "schedule_comfort_valid": int(schedule_comfort is not None),
+                            "schedule_comfort_cold": int(schedule_comfort == -1),
+                            "schedule_comfort_warm": int(schedule_comfort == 1),
                         },
                     )
                 except Exception:  # noqa: BLE001
@@ -871,7 +876,11 @@ class RoomMindCoordinator(DataUpdateCoordinator):
 
         # Determine dual heat/cool target temperatures
         # Returns TargetTemps(heat, cool). None values mean "force off".
-        occupancy_vacant = is_room_vacant(self.hass, room, time.time())
+        now = time.time()
+        occupancy_vacant = is_room_vacant(self.hass, room, now)
+        temporary_target = is_override_active(room) or (
+            settings.get("vacation_temp") is not None and (settings.get("vacation_until") or 0) > now
+        )
         targets = self._resolve_target_temps(
             room, settings, schedule_blocks, schedule_entity_id, room_vacant=occupancy_vacant
         )
@@ -1364,6 +1373,24 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             compressor_held=compressor_forced_on,
         )
 
+        # Score the target only while the room follows its schedule. Use
+        # measured temperature, never the controller's dropout fallback.
+        schedule_comfort = None
+        if climate_active and not (
+            raw_open
+            or window_open
+            or waiting_for_data
+            or force_off
+            or temporary_target
+            or presence_away
+            or occupancy_vacant
+            or mold_prevention_temp_delta > 0
+        ):
+            can_heat, can_cool = get_can_heat_cool(room, acs_can_heat=check_acs_can_heat(self.hass, room))
+            schedule_comfort = classify_schedule_comfort(
+                current_temp_raw, targets.heat if can_heat else None, targets.cool if can_cool else None
+            )
+
         return self._build_room_state_dict(
             area_id=area_id,
             room=room,
@@ -1375,6 +1402,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             direct_target=controller.direct_target(mode, target_temp) if target_temp is not None else None,
             targets=targets,
             schedule_temp_warnings=schedule_temp_warnings,
+            schedule_comfort=schedule_comfort,
             display_mode=display_mode,
             display_pf=display_pf,
             heat_source_plan=heat_source_plan,
@@ -1649,6 +1677,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         direct_target: float | None = None,
         targets: TargetTemps,
         schedule_temp_warnings: list[dict[str, Any]],
+        schedule_comfort: int | None,
         display_mode: str,
         display_pf: float,
         heat_source_plan: HeatSourcePlan | None,
@@ -1723,6 +1752,7 @@ class RoomMindCoordinator(DataUpdateCoordinator):
             "heat_target": targets.heat,
             "cool_target": targets.cool,
             "schedule_temp_warnings": schedule_temp_warnings,
+            "schedule_comfort": schedule_comfort,
             "mode": display_mode,
             "commanded_mode": mode,
             "heating_power": round(display_pf * 100) if display_mode != MODE_IDLE else 0,

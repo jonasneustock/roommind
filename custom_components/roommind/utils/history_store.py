@@ -6,8 +6,11 @@ import csv
 import logging
 import os
 import time
+from contextlib import suppress
 
 _LOGGER = logging.getLogger(__name__)
+
+SCHEDULE_COMFORT_FIELDS = ("schedule_comfort_valid", "schedule_comfort_cold", "schedule_comfort_warm")
 
 DETAIL_FIELDS = [
     "timestamp",
@@ -26,9 +29,11 @@ DETAIL_FIELDS = [
     "humidity",
     "heat_target",
     "cool_target",
+    *SCHEDULE_COMFORT_FIELDS,
 ]
 DETAIL_MAX_AGE = 48 * 3600  # 48 hours
 HISTORY_MAX_AGE = 90 * 24 * 3600  # 90 days
+HISTORY_BUCKET_SECONDS = 300
 
 
 class HistoryStore:
@@ -94,6 +99,7 @@ class HistoryStore:
                     "humidity": data.get("humidity", ""),
                     "heat_target": data.get("heat_target", ""),
                     "cool_target": data.get("cool_target", ""),
+                    **{field: data.get(field, "") for field in SCHEDULE_COMFORT_FIELDS},
                 }
             )
 
@@ -170,7 +176,7 @@ class HistoryStore:
 
         # Downsample archive to 5-min buckets and append to history
         if archive:
-            downsampled = self._downsample(archive, bucket_seconds=300)
+            downsampled = self._downsample(archive, bucket_seconds=HISTORY_BUCKET_SECONDS)
             self._append_history(area_id, downsampled)
 
         # Rewrite detail with only recent rows
@@ -229,6 +235,15 @@ class HistoryStore:
                         except (ValueError, TypeError):
                             pass
                 avg_row[field] = round(sum(vals) / len(vals), 2) if vals else ""
+            # Preserve comfort proportions across rotation. A legacy sample in the
+            # same bucket contributes no monitored time to the new metric.
+            if any(row.get("schedule_comfort_valid", "") != "" for row in bucket):
+                for field in SCHEDULE_COMFORT_FIELDS:
+                    count = 0
+                    for row in bucket:
+                        with suppress(TypeError, ValueError):
+                            count += float(row.get(field) or 0) == 1
+                    avg_row[field] = count / len(bucket)
             result.append(avg_row)
         return result
 

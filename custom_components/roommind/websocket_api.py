@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC
+from math import isfinite
 from typing import TYPE_CHECKING
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CLIMATE_MODES,
@@ -33,6 +36,7 @@ from .services.analytics_service import (
     _safe_float,  # noqa: F401 - re-exported for tests
     build_analytics_data,
 )
+from .services.schedule_comfort import build_comfort_ranking
 from .utils.area_utils import REST_SWITCHED_OFF, rooms_with_area, rooms_without_area
 from .utils.device_utils import (
     COIL_DRY_INHERIT,
@@ -50,6 +54,7 @@ from .utils.device_utils import (
     ValveEntities,
     get_valve_entities,
 )
+from .utils.history_store import HISTORY_MAX_AGE
 from .utils.schedule_utils import mask_override_band, override_preset_band
 
 _LOGGER = logging.getLogger(__name__)
@@ -955,6 +960,42 @@ async def websocket_get_analytics(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/analytics/comfort_ranking",
+        vol.Required("start_ts"): vol.Coerce(float),
+        vol.Required("end_ts"): vol.Coerce(float),
+    }
+)
+@websocket_api.async_response
+async def websocket_comfort_ranking(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Rank rooms by missed scheduled temperature in the requested interval."""
+    start_ts = msg["start_ts"]
+    end_ts = min(msg["end_ts"], time.time())
+    if not (isfinite(msg["end_ts"]) and 0 <= start_ts < end_ts and end_ts - start_ts <= HISTORY_MAX_AGE + 86400):
+        connection.send_error(msg["id"], "invalid_range", "Choose a valid range up to 90 days")
+        return
+
+    store = hass.data[DOMAIN]["store"]
+    coordinator = _get_coordinator(hass)
+    rooms = rooms_with_area(hass, store.get_rooms())
+    area_ids = [area_id for area_id, room in rooms.items() if not room.get("is_outdoor", False)]
+    zone = dt_util.get_time_zone(hass.config.time_zone) or UTC
+    result = await hass.async_add_executor_job(
+        build_comfort_ranking,
+        coordinator.history_store if coordinator else None,
+        area_ids,
+        start_ts,
+        end_ts,
+        zone,
+    )
+    connection.send_result(msg["id"], result)
+
+
 # ---------------------------------------------------------------------------
 # Reset thermal model (per room)
 # ---------------------------------------------------------------------------
@@ -1126,6 +1167,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_get_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
     websocket_api.async_register_command(hass, websocket_get_analytics)
+    websocket_api.async_register_command(hass, websocket_comfort_ranking)
     websocket_api.async_register_command(hass, websocket_thermal_reset)
     websocket_api.async_register_command(hass, websocket_thermal_reset_all)
     websocket_api.async_register_command(hass, websocket_boost_learning)

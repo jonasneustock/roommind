@@ -11,6 +11,8 @@ import "./analytics/rs-analytics-summary";
 import "./analytics/rs-analytics-chart";
 import "./analytics/rs-analytics-rhythm";
 import "./analytics/rs-analytics-model";
+import "./analytics/rs-analytics-comfort-ranking";
+import type { ComfortDaySelection } from "./analytics/rs-analytics-comfort-ranking";
 
 @customElement("rs-analytics")
 export class RsAnalytics extends LitElement {
@@ -91,6 +93,13 @@ export class RsAnalytics extends LitElement {
         @room-selected=${this._onRoomSelected}
         @range-changed=${this._onRangeChanged}
       ></rs-analytics-toolbar>
+      <rs-analytics-comfort-ranking
+        .hass=${this.hass}
+        .rooms=${this.rooms}
+        .rangeStart=${this._rangeStart}
+        .rangeEnd=${this._rangeEnd}
+        @comfort-day-selected=${this._onComfortDaySelected}
+      ></rs-analytics-comfort-ranking>
       ${
         this._selectedRoom
           ? this._loading && !this._data
@@ -185,6 +194,19 @@ export class RsAnalytics extends LitElement {
     this._rangeStart = new Date(`${e.detail}T00:00:00`).getTime();
     this._rangeEnd = Math.min(end, now);
     this._chartAnchor = this._rangeEnd;
+    await this._scrollToChart();
+  }
+
+  private async _onComfortDaySelected(e: CustomEvent<ComfortDaySelection>) {
+    this._onRoomSelected(e);
+    this._activeQuick = null;
+    this._rangeStart = e.detail.rangeStart;
+    this._rangeEnd = e.detail.rangeEnd;
+    this._chartAnchor = this._rangeEnd;
+    await this._scrollToChart();
+  }
+
+  private async _scrollToChart() {
     await this.updateComplete;
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.renderRoot
