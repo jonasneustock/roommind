@@ -172,6 +172,7 @@ def simulate_prediction(
     q_rebound: float | None = None,
     run_system: str | None = None,
     outdoor_known: bool = True,
+    modes: list[str] | None = None,
 ) -> list[float]:
     """Simulate temperature prediction for the analytics chart.
 
@@ -179,10 +180,14 @@ def simulate_prediction(
     - Window open: pure heat exchange via window
     - MPC active: rolling-horizon optimizer simulation
     - Fallback: bang-bang with hysteresis
+
+    When provided, ``modes`` receives the simulated action for each temperature.
     """
     # Run rules follow the system actually heating (AC alone in a UFH room, as in the controller)
     rules = heating_system_type if run_system is None else run_system
     if window_open:
+        if modes is not None:
+            modes.extend([MODE_IDLE] * len(target_forecast))
         return _simulate_window_open(model, estimator, target_forecast, outdoor_series, current_temp)
 
     if mpc_active:
@@ -205,6 +210,7 @@ def simulate_prediction(
             q_rebound=q_rebound,
             run_system=rules,
             outdoor_known=outdoor_known,
+            modes=modes,
         )
 
     return _simulate_bangbang(
@@ -226,6 +232,7 @@ def simulate_prediction(
         q_rebound=q_rebound,
         run_system=rules,
         capped=is_mpc_enabled(settings) and not is_slow_heat(get_min_run_blocks(rules, PLAN_DT_MINUTES)),
+        modes=modes,
     )
 
 
@@ -313,6 +320,7 @@ def _simulate_mpc(
     q_rebound: float | None = None,
     run_system: str | None = None,
     outdoor_known: bool = True,
+    modes: list[str] | None = None,
 ) -> list[float]:
     """Rolling-horizon MPC simulation matching the real controller.
 
@@ -504,6 +512,8 @@ def _simulate_mpc(
             run_seconds += block_seconds
         prev_action = action
 
+        if modes is not None:
+            modes.append(action)
         pred_temps.append(round(T, 2))
 
     return pred_temps
@@ -537,6 +547,7 @@ def _simulate_bangbang(
     q_rebound: float | None = None,
     run_system: str | None = None,
     capped: bool = True,
+    modes: list[str] | None = None,
 ) -> list[float]:
     """Bang-bang fallback simulation with mode stickiness + idle rate cap.
 
@@ -641,6 +652,8 @@ def _simulate_bangbang(
                     sim_heating_blocks * 5.0,
                 )
 
+        if modes is not None:
+            modes.append(sim_mode)
         pred_temps.append(round(T, 2))
 
     return pred_temps

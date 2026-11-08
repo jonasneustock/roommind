@@ -232,3 +232,15 @@ In that case RoomMind can decide which source should heat:
 - or both, when the gap is large
 
 It uses temperature gap and outdoor conditions to make that choice.
+
+## Compare a heating schedule before changing it
+
+Open **Analytics**, select a heated room with a temperature sensor and a learned model, and choose a historical range. The schedule simulation uses up to the last 48 hours of that range. It needs at least one uninterrupted hour of recorded indoor and outdoor temperatures.
+
+- Shift the first comfort block of each day up to 180 minutes earlier or later. The block stays within its original day and retains at least five minutes when shifted later.
+- Set an overnight heat target before the first and after the last comfort block, or for the whole day if there is no block. An overnight target can simulate heating where the schedule ordinarily turns it off.
+- Set a daytime heat target for active comfort blocks, including those with a block-specific heating target. The cooling target stays in place.
+
+The same learned room model, recorded outdoor temperatures and available sunlight are used for both runs. Periods with open windows or gaps in temperature history are skipped. Each continuous stretch starts at the recorded indoor temperature. The replay uses the weekly schedule as it is configured today and excludes temporary overrides and occupancy. Both runs count misses greater than 1.0 °C against the current schedule, including when the proposed schedule deliberately lowers its target. Heating minutes represent simulated controller activity.
+
+If RoomMind history includes electricity prices, the comparison shows heating time at each recorded price and a time-weighted average. Prices describe the timing of simulated heating. The comparison is a preview and leaves the configured schedule intact.

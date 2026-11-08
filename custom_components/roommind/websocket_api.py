@@ -33,6 +33,7 @@ from .services.analytics_service import (
     _safe_float,  # noqa: F401 - re-exported for tests
     build_analytics_data,
 )
+from .services.schedule_simulation import ScheduleChanges, ScheduleSimulationError, build_schedule_comparison
 from .utils.area_utils import REST_SWITCHED_OFF, rooms_with_area, rooms_without_area
 from .utils.device_utils import (
     COIL_DRY_INHERIT,
@@ -955,6 +956,41 @@ async def websocket_get_analytics(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/analytics/simulate_schedule",
+        vol.Required("area_id"): str,
+        vol.Required("start_ts"): vol.Coerce(float),
+        vol.Required("end_ts"): vol.Coerce(float),
+        vol.Optional("start_shift_minutes", default=0): int,
+        vol.Optional("overnight_heat"): vol.Coerce(float),
+        vol.Optional("daytime_heat"): vol.Coerce(float),
+    }
+)
+@websocket_api.async_response
+async def websocket_simulate_schedule(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Run a read-only comparison of two schedules on a room's recorded weather."""
+    try:
+        changes = ScheduleChanges(msg["start_shift_minutes"], msg.get("overnight_heat"), msg.get("daytime_heat"))
+        result = await build_schedule_comparison(
+            hass,
+            hass.data[DOMAIN]["store"],
+            _get_coordinator(hass),
+            msg["area_id"],
+            msg["start_ts"],
+            msg["end_ts"],
+            changes,
+        )
+    except ScheduleSimulationError as err:
+        connection.send_error(msg["id"], err.code, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
 # ---------------------------------------------------------------------------
 # Reset thermal model (per room)
 # ---------------------------------------------------------------------------
@@ -1126,6 +1162,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_get_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
     websocket_api.async_register_command(hass, websocket_get_analytics)
+    websocket_api.async_register_command(hass, websocket_simulate_schedule)
     websocket_api.async_register_command(hass, websocket_thermal_reset)
     websocket_api.async_register_command(hass, websocket_thermal_reset_all)
     websocket_api.async_register_command(hass, websocket_boost_learning)

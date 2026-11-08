@@ -11,6 +11,7 @@ import "./analytics/rs-analytics-summary";
 import "./analytics/rs-analytics-chart";
 import "./analytics/rs-analytics-rhythm";
 import "./analytics/rs-analytics-model";
+import "./analytics/rs-schedule-simulation";
 
 @customElement("rs-analytics")
 export class RsAnalytics extends LitElement {
@@ -127,6 +128,18 @@ export class RsAnalytics extends LitElement {
                         .controlMode=${this.controlMode}
                         .managed=${!this.rooms[this._selectedRoom]?.temperature_sensor}
                       ></rs-analytics-model>`
+                    : nothing
+                }
+                ${
+                  !this.rooms[this._selectedRoom]?.is_outdoor &&
+                  this.rooms[this._selectedRoom]?.temperature_sensor &&
+                  this.rooms[this._selectedRoom]?.climate_mode !== "cool_only"
+                    ? html`<rs-schedule-simulation
+                        .hass=${this.hass}
+                        .areaId=${this._selectedRoom}
+                        .rangeStart=${this._rangeStart}
+                        .rangeEnd=${this._rangeEnd}
+                      ></rs-schedule-simulation>`
                     : nothing
                 }
               `

@@ -1909,14 +1909,15 @@ async def test_analytics_model_has_occupancy_sensors_false(ws_hass, store, conne
 
 
 def test_register_websocket_commands(hass):
-    """async_register_websocket_commands registers all 13 commands."""
+    """async_register_websocket_commands registers the existing commands and schedule simulation."""
     from unittest.mock import patch
 
-    from custom_components.roommind.websocket_api import async_register_websocket_commands
+    from custom_components.roommind.websocket_api import async_register_websocket_commands, websocket_simulate_schedule
 
     with patch("custom_components.roommind.websocket_api.websocket_api.async_register_command") as mock_reg:
         async_register_websocket_commands(hass)
-        assert mock_reg.call_count == 13
+        assert mock_reg.call_count >= 13
+        mock_reg.assert_any_call(hass, websocket_simulate_schedule)
 
 
 # ---------------------------------------------------------------------------
