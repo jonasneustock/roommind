@@ -53,7 +53,7 @@ from .const import (
     make_roommind_context,
 )
 from .control.direct_valve import async_release_orphaned_valves, async_release_valve, held_opening
-from .control.electricity_tariff import ElectricityTariff, read_electricity_tariff
+from .control.electricity_tariff import ElectricityTariff, read_current_electricity_price, read_electricity_tariff
 from .control.mpc_controller import (
     DEFAULT_OUTDOOR_TEMP_FALLBACK,
     MPCController,
@@ -398,6 +398,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
         self._history_write_count += 1
         if self._history_write_count >= HISTORY_WRITE_CYCLES and self._history_store:
             self._history_write_count = 0
+            observed_price, observed_price_unit = read_current_electricity_price(
+                self.hass, settings.get("electricity_price_sensor", "")
+            )
+            observed_at = time.time()
             for area_id, rs in room_states.items():
                 if area_id in learning_disabled:
                     continue
@@ -428,7 +432,10 @@ class RoomMindCoordinator(DataUpdateCoordinator):
                             "humidity": rs.get("current_humidity"),
                             "heat_target": rs.get("heat_target"),
                             "cool_target": rs.get("cool_target"),
+                            "electricity_price": observed_price,
+                            "electricity_price_unit": observed_price_unit,
                         },
+                        observed_at,
                     )
                 except Exception:  # noqa: BLE001
                     _LOGGER.warning("History record failed for '%s'", area_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,7 @@ from .services.analytics_service import (
     _safe_float,  # noqa: F401 - re-exported for tests
     build_analytics_data,
 )
+from .services.tariff_analytics import MAX_TARIFF_RANGE_S, build_tariff_period
 from .utils.area_utils import REST_SWITCHED_OFF, rooms_with_area, rooms_without_area
 from .utils.device_utils import (
     COIL_DRY_INHERIT,
@@ -962,6 +964,59 @@ async def websocket_get_analytics(
     connection.send_result(msg["id"], result)
 
 
+_TARIFF_RANGE = {
+    vol.Required("start_ts"): vol.Coerce(float),
+    vol.Required("end_ts"): vol.Coerce(float),
+}
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "roommind/analytics/tariffs",
+        vol.Required("area_id"): str,
+        vol.Required("current"): _TARIFF_RANGE,
+        vol.Required("comparison"): _TARIFF_RANGE,
+        vol.Optional("cheap_max"): vol.Coerce(float),
+        vol.Optional("expensive_min"): vol.Coerce(float),
+    }
+)
+@websocket_api.async_response
+async def websocket_get_tariff_analytics(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict,
+) -> None:
+    """Return heating tariff observations for two time ranges."""
+    area_id = msg["area_id"]
+    if hass.data[DOMAIN]["store"].get_room(area_id) is None:
+        connection.send_error(msg["id"], "unknown_room", "Room is not configured")
+        return
+
+    low, high = msg.get("cheap_max"), msg.get("expensive_min")
+    cutoffs = None
+    if low is not None or high is not None:
+        if low is None or high is None or not (math.isfinite(low) and math.isfinite(high) and low < high):
+            connection.send_error(msg["id"], "invalid_cutoffs", "Enter two finite, ordered tariff cutoffs")
+            return
+        cutoffs = (low, high)
+
+    ranges = [(msg[key]["start_ts"], msg[key]["end_ts"]) for key in ("current", "comparison")]
+    if any(
+        not (math.isfinite(start) and math.isfinite(end) and 0 < end - start <= MAX_TARIFF_RANGE_S)
+        for start, end in ranges
+    ):
+        connection.send_error(msg["id"], "invalid_range", "Each range must span up to 90 days")
+        return
+
+    coordinator = _get_coordinator(hass)
+    history = coordinator.history_store if coordinator else None
+    periods = [
+        await hass.async_add_executor_job(build_tariff_period, history, area_id, start, end, cutoffs)
+        for start, end in ranges
+    ]
+    connection.send_result(msg["id"], {"periods": periods, "cutoffs": cutoffs})
+
+
 # ---------------------------------------------------------------------------
 # Reset thermal model (per room)
 # ---------------------------------------------------------------------------
@@ -1133,6 +1188,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_get_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
     websocket_api.async_register_command(hass, websocket_get_analytics)
+    websocket_api.async_register_command(hass, websocket_get_tariff_analytics)
     websocket_api.async_register_command(hass, websocket_thermal_reset)
     websocket_api.async_register_command(hass, websocket_thermal_reset_all)
     websocket_api.async_register_command(hass, websocket_boost_learning)

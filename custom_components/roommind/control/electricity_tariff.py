@@ -68,6 +68,14 @@ class ElectricityTariff:
         return change
 
 
+def read_current_electricity_price(hass: HomeAssistant, entity_id: str) -> tuple[float | None, str | None]:
+    """Read the observed current tariff independently of the forecast."""
+    if not entity_id or (state := hass.states.get(entity_id)) is None:
+        return None, None
+    unit = state.attributes.get("unit_of_measurement")
+    return _number(state.state), unit if isinstance(unit, str) and unit else None
+
+
 def read_electricity_tariff(hass: HomeAssistant, current_entity: str, forecast_entity: str) -> ElectricityTariff | None:
     """Read the selected sensors, requiring matching units when both declare one."""
     if not current_entity or not forecast_entity:

@@ -11,6 +11,7 @@ import "./analytics/rs-analytics-summary";
 import "./analytics/rs-analytics-chart";
 import "./analytics/rs-analytics-rhythm";
 import "./analytics/rs-analytics-model";
+import "./analytics/rs-analytics-tariff-comparison";
 
 @customElement("rs-analytics")
 export class RsAnalytics extends LitElement {
@@ -97,6 +98,14 @@ export class RsAnalytics extends LitElement {
             ? html`<div class="loading">${localize("panel.loading", l)}</div>`
             : html`
                 ${this._renderSummary()}
+                ${
+                  !this.rooms[this._selectedRoom]?.is_outdoor
+                    ? html`<rs-analytics-tariff-comparison
+                        .hass=${this.hass}
+                        .areaId=${this._selectedRoom}
+                      ></rs-analytics-tariff-comparison>`
+                    : nothing
+                }
                 <rs-analytics-chart
                   .hass=${this.hass}
                   .data=${this._data}

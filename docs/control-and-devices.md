@@ -55,6 +55,19 @@ price magnitude. Without a usable comparison, RoomMind uses the normal schedule 
 when the tariff is adjusting the target. Actual temperatures still depend on the room, heating device and existing
 device protections.
 
+### Compare logged heating and tariffs
+
+Open **Analytics**, select a room, and expand **Heating and tariffs**. Choose two date ranges and optionally enter
+the maximum cheap price and minimum expensive price. Both cutoffs are inclusive and the same cutoffs apply to
+both periods. Exact observed tariffs and logged heating activity appear together in each period's observations.
+
+RoomMind records the configured current price and its unit with new room history samples. This works with a current
+price sensor alone. Older history and periods without a valid sensor reading have no price coverage. The comparison
+reports monitored time, heating time, and heating time with a recorded tariff. It uses elapsed time between samples,
+skips long gaps, and keeps different tariff units separate. The average uses the recorded tariffs and weights
+them by time spent heating. Logged heating activity may be inferred from the device when a direct heating state
+is unavailable.
+
 ## Thermostat vs Climate Device
 
 Both options are Home Assistant `climate.*` entities, but RoomMind treats them differently:

@@ -6,6 +6,7 @@ import csv
 import logging
 import os
 import time
+from itertools import groupby
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ DETAIL_FIELDS = [
     "humidity",
     "heat_target",
     "cool_target",
+    "electricity_price",
+    "electricity_price_unit",
 ]
 DETAIL_MAX_AGE = 48 * 3600  # 48 hours
 HISTORY_MAX_AGE = 90 * 24 * 3600  # 90 days
@@ -94,6 +97,8 @@ class HistoryStore:
                     "humidity": data.get("humidity", ""),
                     "heat_target": data.get("heat_target", ""),
                     "cool_target": data.get("cool_target", ""),
+                    "electricity_price": data.get("electricity_price", ""),
+                    "electricity_price_unit": data.get("electricity_price_unit", ""),
                 }
             )
 
@@ -199,11 +204,23 @@ class HistoryStore:
             bucket_key = int(ts // bucket_seconds)
             buckets.setdefault(bucket_key, []).append(row)
 
+        groups: list[tuple[float, list[dict]]] = []
+        for bucket_key, bucket in sorted(buckets.items()):
+            if any(row.get("electricity_price", "") != "" for row in bucket):
+                # Keep the original timestamps of tariff and mode changes. Averaging
+                # across a transition would invent a tariff or shift heating runtime.
+                for _, samples in groupby(sorted(bucket, key=self._safe_ts), key=self._tariff_sample):
+                    group = list(samples)
+                    groups.append((self._safe_ts(group[0]), group))
+            else:
+                groups.append((bucket_key * bucket_seconds, bucket))
+
         result = []
-        for bucket_key in sorted(buckets):
-            bucket = buckets[bucket_key]
+        for timestamp, bucket in groups:
             avg_row = {
-                "timestamp": bucket_key * bucket_seconds,
+                "timestamp": timestamp,
+                "electricity_price": bucket[0].get("electricity_price", ""),
+                "electricity_price_unit": bucket[0].get("electricity_price_unit", ""),
                 "mode": bucket[0]["mode"],
                 "window_open": bucket[0].get("window_open", ""),
                 "device_setpoint": bucket[0].get("device_setpoint", ""),
@@ -231,6 +248,10 @@ class HistoryStore:
                 avg_row[field] = round(sum(vals) / len(vals), 2) if vals else ""
             result.append(avg_row)
         return result
+
+    @staticmethod
+    def _tariff_sample(row: dict) -> tuple:
+        return row.get("electricity_price", ""), row.get("electricity_price_unit", ""), row.get("mode", "")
 
     @staticmethod
     def _safe_ts(row: dict) -> float:
